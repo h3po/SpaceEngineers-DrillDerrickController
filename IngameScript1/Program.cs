@@ -16,22 +16,23 @@ using VRage.Game.ObjectBuilders.Definitions;
 using VRage.Game;
 using VRage;
 using VRageMath;
-using static VRageMath.Base6Directions;
 using VRage.Game.ModAPI;
 using IMyCubeGrid = VRage.Game.ModAPI.Ingame.IMyCubeGrid;
-using IMyCubeBlock = VRage.Game.ModAPI.Ingame.IMyCubeBlock;
 
 namespace IngameScript
 {
     partial class Program : MyGridProgram
     {
+        //Configuration
+        float drillSpeedMetersPerSecond = 1.5f;
+
+        //Main Code
         IMyTextSurface lcdSurface;
         bool firstPrint = true;
 
-        List<IMyPistonBase> outwardPistons = new List<IMyPistonBase>();
-        List<IMyPistonBase> inwardPistons = new List<IMyPistonBase>();
-        List<IMyPistonBase> upwardPistons = new List<IMyPistonBase>();
-        List<IMyPistonBase> downwardPistons = new List<IMyPistonBase>();
+        //store pistons in lists keyed by direction
+        Dictionary<Base6Directions.Direction, List<IMyPistonBase>> armPistons = Base6Directions.EnumDirections.ToDictionary(d => d, d => new List<IMyPistonBase>());
+
         IMyMotorStator mainRotor;
 
         public Program()
@@ -46,9 +47,9 @@ namespace IngameScript
             Dictionary<IMyCubeGrid, IMyPistonBase> pistonsByGrid = allPistons.ToDictionary(p => p.CubeGrid, p => p);
 
             //get the first piston on the main grid
-            //this is considered facing "outward"
+            //this is considered facing "forward"
             IMyPistonBase firstPiston = pistonsByGrid[Me.CubeGrid];
-            outwardPistons.Add(firstPiston);
+            armPistons[Base6Directions.Direction.Forward].Add(firstPiston);
 
             //get the rotor on the main grid
             //this is considered facing "down"
@@ -62,25 +63,14 @@ namespace IngameScript
 
             sortPistonsByDirection(firstPiston, referenceMatrix, pistonsByGrid);
 
-            EchoLcd("Outward: ");
-            foreach (IMyPistonBase piston in outwardPistons)
+            //print pistons to screen
+            foreach (Base6Directions.Direction dir in Base6Directions.EnumDirections)
             {
-                EchoLcd(piston.CustomName);
-            }
-            EchoLcd("Inward: ");
-            foreach (IMyPistonBase piston in inwardPistons)
-            {
-                EchoLcd(piston.CustomName);
-            }
-            EchoLcd("Up: ");
-            foreach (IMyPistonBase piston in upwardPistons)
-            {
-                EchoLcd(piston.CustomName);
-            }
-            EchoLcd("Down: ");
-            foreach (IMyPistonBase piston in downwardPistons)
-            {
-                EchoLcd(piston.CustomName);
+                EchoLcd(dir.ToString() + ":");
+                foreach (IMyPistonBase piston in armPistons[dir])
+                {
+                    EchoLcd(piston.CustomName);
+                }
             }
         }
 
@@ -93,40 +83,15 @@ namespace IngameScript
             //the next grid has a piston
             if (pistonsByGrid.TryGetValue(nextGrid, out nextPiston))
             {
-                Base6Directions.Direction nextDirection = getPistonDirection(referenceMatrix, nextPiston);
-
-                //the next piston faces the same way as the reference
-                if (nextDirection == Base6Directions.Direction.Forward)
-                {
-                    outwardPistons.Add(nextPiston);
-                }
-                //same axis, but inverted
-                else if (nextDirection == Base6Directions.Direction.Backward)
-                {
-                    inwardPistons.Add(nextPiston);
-                }
-                else if (nextDirection == Base6Directions.Direction.Up)
-                {
-                    upwardPistons.Add(nextPiston);
-                }
-                else if (nextDirection == Base6Directions.Direction.Down)
-                {
-                    downwardPistons.Add(nextPiston);
-                }
-                else
-                {
-                    EchoLcd("sideways piston:" + nextPiston.CustomName);
-                }
+                //store the piston in our dict of lists keyed by direction
+                armPistons[getPistonDirection(referenceMatrix, nextPiston)].Add(nextPiston);
 
                 //recurse with the next piston as the new start piston
                 sortPistonsByDirection(nextPiston, referenceMatrix, pistonsByGrid);
             }
-            //no more pistons
-            else
-            {
-                return;
-            }
 
+            //reached the end of the piston chain
+            return;
         }
 
         Base6Directions.Direction getPistonDirection(MatrixD referenceMatrix, IMyPistonBase piston)
