@@ -23,8 +23,14 @@ namespace IngameScript
 {
     partial class Program : MyGridProgram
     {
+        #region mdk preserve
+        #region mdk macros
+        //This script was deployed at $MDK_DATETIME$
+        #endregion
+
         //Configuration
         float drillSpeedMetersPerSecond = 1.5f;
+        #endregion
 
         //Main Code
         IMyTextSurface lcdSurface;
