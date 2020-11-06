@@ -28,13 +28,14 @@ namespace IngameScript
         //This script was deployed at $MDK_DATETIME$
         #endregion
 
-        const string iniSection = "DrillDerrickController";
+        const string configName = "DrillDerrickController";
         #endregion
 
         //config defaults
-        MyIni _ini = new MyIni();
+        MyIni config = new MyIni();
+        MyIni state = new MyIni();
         float drillSpeed = 1.5f;
-        float drillDepth = 2.5f;
+        float drillRadius = 2.5f;
         bool debug = true;
 
         //state
@@ -43,13 +44,13 @@ namespace IngameScript
         bool initialized = false;
 
         //arm shape
-        float minFwd = 0; float curFwd = 0; float maxFwd = 0;
-        float minDown = 0; float curDown = 0; float maxDown = 0;
-        float minRadius = 0; //this is the outermost edge of the hole if the arm is fully retracted, not the innermost
-        float maxRadius = 0;
+        float minArmFwd = 0; float curArmFwd = 0; float maxArmFwd = 0;
+        float minArmDown = 0; float curArmDown = 0; float maxArmDown = 0;
+        float minArmRadius = 0; //this is the outermost edge of the hole if the arm is fully retracted, not the innermost
+        float maxArmRadius = 0;
 
         //blocks
-        IMyTextSurface lcdSurface;
+        IMyTextSurface debugLcdSurface;
         //store pistons in lists keyed by direction
         Dictionary<Base6Directions.Direction, List<IMyPistonBase>> armPistons = Base6Directions.EnumDirections.ToDictionary(d => d, d => new List<IMyPistonBase>());
         IMyMotorStator mainRotor;
@@ -57,47 +58,43 @@ namespace IngameScript
 
         public Program()
         {
-            //disable echoes
-            if (!debug)
-                Echo = text => { };
-
             try
             {
                 try
                 {
                     IMyTextSurfaceProvider lcdBlock = (IMyTextSurfaceProvider)GridTerminalSystem.GetBlockWithName("LCD Panel");
-                    lcdSurface = lcdBlock.GetSurface(0);
-                    lcdSurface.ContentType = ContentType.TEXT_AND_IMAGE;
+                    debugLcdSurface = lcdBlock.GetSurface(0);
+                    debugLcdSurface.ContentType = ContentType.TEXT_AND_IMAGE;
                     Echo = EchoLcd;
                 }
                 catch (Exception) {
                     if (debug)
-                        Echo("No debug \"LCD Panel\" found");
+                        DebugEcho("No debug \"LCD Panel\" found");
                 };
 
                 //Load Config from CustomData
-                Echo("Loading config from CustomData");
+                DebugEcho("Loading config from CustomData");
                 MyIniParseResult result;
-                if (!_ini.TryParse(Me.CustomData, out result))
+                if (!config.TryParse(Me.CustomData, out result))
                     throw new Exception("CustomData could not be parsed:\n" + result.ToString());
 
-                drillSpeed = _ini.Get(iniSection, "drillSpeed").ToSingle(drillSpeed);
-                drillDepth = _ini.Get(iniSection, "drillDepth").ToSingle(drillDepth);
-                Echo($"Drill Speed: {drillSpeed}, Drill Depth: {drillDepth}");
+                drillSpeed = config.Get(configName, "drillSpeed").ToSingle(drillSpeed);
+                drillRadius = config.Get(configName, "drillDepth").ToSingle(drillRadius);
+                DebugEcho($"Drill Speed: {drillSpeed}, Drill Depth: {drillRadius}");
 
-                if (!_ini.ContainsSection(iniSection))
+                if (!config.ContainsSection(configName))
                 {
                     Save();
                     Me.CustomData = Storage;
-                    Echo("Initialized CustomData with default values");
+                    DebugEcho("Initialized CustomData with default values");
                 }
 
                 //Load State from Storage
-                Echo("Loading state from storage");
-                if (!_ini.TryParse(Me.CustomData, out result))
+                DebugEcho("Loading state from storage");
+                if (!state.TryParse(Me.CustomData, out result))
                     Echo("Storage could not be parsed, reinitializing");
-                forwardProgress = _ini.Get(iniSection, "forwardProgress").ToSingle(0f);
-                downwardProgress = _ini.Get(iniSection, "downwardProgress").ToSingle(0f);
+                forwardProgress = state.Get(configName, "forwardProgress").ToSingle(0f);
+                downwardProgress = state.Get(configName, "downwardProgress").ToSingle(0f);
                 Echo($"Progress Forward: {forwardProgress}, Progress Down: {downwardProgress}");
 
                 //store pistons in dict keyed by cubegrid
@@ -148,10 +145,10 @@ namespace IngameScript
                     Echo("Error: No drills");
                     return;
                 }
-                Echo($"Found {drills.Count()} drills");
+                DebugEcho($"Found {drills.Count()} drills");
 
                 ////print config
-                //Echo(_ini.ToString());
+                //Echo(config.ToString());
 
                 ////print pistons to screen
                 //foreach (Base6Directions.Direction dir in Base6Directions.EnumDirections)
@@ -163,47 +160,47 @@ namespace IngameScript
                 //    }
                 //}
 
-                Echo($"Found {armPistons[Base6Directions.Direction.Forward].Count() + armPistons[Base6Directions.Direction.Backward].Count()} horizontal pistons");
-                Echo($"Found {armPistons[Base6Directions.Direction.Up].Count() + armPistons[Base6Directions.Direction.Down].Count()} vertical pistons");
+                DebugEcho($"Found {armPistons[Base6Directions.Direction.Forward].Count() + armPistons[Base6Directions.Direction.Backward].Count()} horizontal pistons");
+                DebugEcho($"Found {armPistons[Base6Directions.Direction.Up].Count() + armPistons[Base6Directions.Direction.Down].Count()} vertical pistons");
 
                 foreach (IMyPistonBase piston in armPistons[Base6Directions.Direction.Forward])
                 {
-                    minFwd += piston.MinLimit;
-                    curFwd += piston.CurrentPosition;
-                    maxFwd += piston.MaxLimit;
+                    minArmFwd += piston.MinLimit;
+                    curArmFwd += piston.CurrentPosition;
+                    maxArmFwd += piston.MaxLimit;
                 }
 
                 foreach (IMyPistonBase piston in armPistons[Base6Directions.Direction.Backward])
                 {
-                    minFwd -= piston.MaxLimit;
-                    curFwd -= piston.CurrentPosition;
-                    maxFwd -= piston.MinLimit;
+                    minArmFwd -= piston.MaxLimit;
+                    curArmFwd -= piston.CurrentPosition;
+                    maxArmFwd -= piston.MinLimit;
                 }
 
-                curFwd -= minFwd;
-                maxFwd -= minFwd;
-                minFwd = 0;
+                curArmFwd -= minArmFwd;
+                maxArmFwd -= minArmFwd;
+                minArmFwd = 0;
 
                 foreach (IMyPistonBase piston in armPistons[Base6Directions.Direction.Down])
                 {
-                    minDown += piston.MinLimit;
-                    curDown += piston.CurrentPosition;
-                    maxDown += piston.MaxLimit;
+                    minArmDown += piston.MinLimit;
+                    curArmDown += piston.CurrentPosition;
+                    maxArmDown += piston.MaxLimit;
                 }
 
                 foreach (IMyPistonBase piston in armPistons[Base6Directions.Direction.Up])
                 {
-                    minDown -= piston.MaxLimit;
-                    curDown -= piston.CurrentPosition;
-                    maxDown -= piston.MinLimit;
+                    minArmDown -= piston.MaxLimit;
+                    curArmDown -= piston.CurrentPosition;
+                    maxArmDown -= piston.MinLimit;
                 }
 
-                curDown -= minDown;
-                maxDown -= minDown;
-                minDown = 0;
+                curArmDown -= minArmDown;
+                maxArmDown -= minArmDown;
+                minArmDown = 0;
 
-                Echo($"Reach Forward: Min {minFwd}, Cur {curFwd}, Max {maxFwd}");
-                Echo($"Reach Down: Min {minDown}, Cur {curDown}, Max {maxDown}");
+                DebugEcho($"Reach Forward: Min {minArmFwd}, Cur {curArmFwd}, Max {maxArmFwd}");
+                DebugEcho($"Reach Down: Min {minArmDown}, Cur {curArmDown}, Max {maxArmDown}");
 
                 //figure out which drill is furthest from the rotation axis
                 Vector3D rotorpos = mainRotor.GetPosition();
@@ -219,16 +216,16 @@ namespace IngameScript
                     armDist.Y = 0;
 
                     //adjust for the current extension of the arm
-                    armDist.Z -= curFwd;
+                    armDist.Z -= curArmFwd;
 
                     float horizontalDist = (float)armDist.Length();
                     //EchoLcd($"{drill.CustomName}: {horizontalDist}");
-                    if (horizontalDist > minRadius)
-                        minRadius = horizontalDist;
+                    if (horizontalDist > minArmRadius)
+                        minArmRadius = horizontalDist;
                 }
 
-                maxRadius = minRadius + maxFwd;
-                Echo($"Minimum Radius: {minRadius}\nMaxium Radius: {maxRadius}");
+                maxArmRadius = minArmRadius + maxArmFwd;
+                DebugEcho($"Minimum Radius: {minArmRadius}\nMaxium Radius: {maxArmRadius}");
 
                 initialized = true;
             }
@@ -271,16 +268,20 @@ namespace IngameScript
 
         public void EchoLcd(string text)
         {
-            //Echo(text);
-            lcdSurface.WriteText(text + "\n", !firstPrint);
+            debugLcdSurface.WriteText(text + "\n", !firstPrint);
             firstPrint = false;
         }
 
-        public void Save() {
-            _ini.Set(iniSection, "forwardProgress", forwardProgress);
-            _ini.Set(iniSection, "downwardProgress", downwardProgress);
+        public void DebugEcho(string text)
+        {
+            if (debug) Echo(text);
+        }
 
-            Storage = _ini.ToString();
+        public void Save() {
+            state.Set(configName, "forwardProgress", forwardProgress);
+            state.Set(configName, "downwardProgress", downwardProgress);
+
+            Storage = state.ToString();
         }
 
         public void Main(string argument, UpdateType updateSource) { }
