@@ -45,8 +45,8 @@ namespace IngameScript
         //arm shape
         float minFwd = 0; float curFwd = 0; float maxFwd = 0;
         float minDown = 0; float curDown = 0; float maxDown = 0;
-        //this is the outermost edge of the hole if the arm is fully retracted, not the innermost
-        float minRadius = 0; float maxRadius = 0;
+        float minRadius = 0; //this is the outermost edge of the hole if the arm is fully retracted, not the innermost
+        float maxRadius = 0;
 
         //blocks
         IMyTextSurface lcdSurface;
@@ -70,7 +70,7 @@ namespace IngameScript
                     lcdSurface.ContentType = ContentType.TEXT_AND_IMAGE;
                     Echo = EchoLcd;
                 }
-                catch (Exception e) {
+                catch (Exception) {
                     if (debug)
                         Echo("No debug \"LCD Panel\" found");
                 };
@@ -103,11 +103,30 @@ namespace IngameScript
                 //store pistons in dict keyed by cubegrid
                 List<IMyPistonBase> allPistons = new List<IMyPistonBase>();
                 GridTerminalSystem.GetBlocksOfType(allPistons);
-                Dictionary<IMyCubeGrid, IMyPistonBase> pistonsByGrid = allPistons.ToDictionary(p => p.CubeGrid, p => p);
+                Dictionary<IMyCubeGrid, IMyPistonBase> pistonsByGrid = null;
+                try
+                {
+                    pistonsByGrid = allPistons.ToDictionary(p => p.CubeGrid, p => p);
+                }
+                catch (System.ArgumentException)
+                {
+                    Echo("Error: Found multiple pistons on the same Grid - Your Subgrids may have merged together");
+                    return;
+                }
 
                 //get the first piston on the main grid
                 //this is considered facing "forward"
-                IMyPistonBase firstPiston = pistonsByGrid[Me.CubeGrid];
+                IMyPistonBase firstPiston = null;
+                try
+                {
+                    firstPiston = pistonsByGrid[Me.CubeGrid];
+                }
+                catch (System.Collections.Generic.KeyNotFoundException)
+                {
+                    Echo("Error: No piston found on the PB's grid");
+                    return;
+                }
+                
                 armPistons[Base6Directions.Direction.Forward].Add(firstPiston);
 
                 //get the rotor on the main grid
@@ -124,6 +143,11 @@ namespace IngameScript
                 //get the drills and pistons
                 IMyCubeGrid drillGrid = sortPistonsByDirection(firstPiston, referenceMatrixTransposed, pistonsByGrid);
                 GridTerminalSystem.GetBlocksOfType(drills);
+                if (drills.Count() == 0)
+                {
+                    Echo("Error: No drills");
+                    return;
+                }
                 Echo($"Found {drills.Count()} drills");
 
                 ////print config
