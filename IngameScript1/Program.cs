@@ -35,17 +35,19 @@ namespace IngameScript
         MyIni config = new MyIni();
         MyIni state = new MyIni();
         float drillSpeed = 1.5f;
+        float moveSpeed = 10.0f;
         float drillRadius = 2.5f;
         bool debug = true;
 
         //state
-        float forwardProgress = 0; float downwardProgress = 0;
+        float inwardProgress = 0; float downwardProgress = 0;
         bool firstPrint = true;
         bool initialized = false;
+        bool running = false;
 
         //arm shape
-        float minArmFwd = 0; float curArmFwd = 0; float maxArmFwd = 0;
-        float minArmDown = 0; float curArmDown = 0; float maxArmDown = 0;
+        float minArmFwd = 0; float curArmFwd = 0; float maxArmFwd = 0; float targetArmFwd = 0;
+        float minArmDown = 0; float curArmDown = 0; float maxArmDown = 0; float targetArmDown = 0;
         float minArmRadius = 0; //this is the outermost edge of the hole if the arm is fully retracted, not the innermost
         float maxArmRadius = 0;
 
@@ -79,8 +81,9 @@ namespace IngameScript
                     throw new Exception("CustomData could not be parsed:\n" + result.ToString());
 
                 drillSpeed = config.Get(configName, "drillSpeed").ToSingle(drillSpeed);
+                moveSpeed = config.Get(configName, "moveSpeed").ToSingle(moveSpeed);
                 drillRadius = config.Get(configName, "drillDepth").ToSingle(drillRadius);
-                DebugEcho($"Drill Speed: {drillSpeed}, Drill Depth: {drillRadius}");
+                DebugEcho($"Drill Speed: {drillSpeed}, Move Speed: {moveSpeed}, Drill Depth: {drillRadius}");
 
                 if (!config.ContainsSection(configName))
                 {
@@ -93,9 +96,9 @@ namespace IngameScript
                 DebugEcho("Loading state from storage");
                 if (!state.TryParse(Me.CustomData, out result))
                     Echo("Storage could not be parsed, reinitializing");
-                forwardProgress = state.Get(configName, "forwardProgress").ToSingle(0f);
+                inwardProgress = state.Get(configName, "forwardProgress").ToSingle(0f);
                 downwardProgress = state.Get(configName, "downwardProgress").ToSingle(0f);
-                Echo($"Progress Forward: {forwardProgress}, Progress Down: {downwardProgress}");
+                Echo($"Progress Inward: {inwardProgress}, Progress Down: {downwardProgress}");
 
                 //store pistons in dict keyed by cubegrid
                 List<IMyPistonBase> allPistons = new List<IMyPistonBase>();
@@ -232,7 +235,7 @@ namespace IngameScript
             catch (Exception e)
             {
                 // Dump the exception content
-                Echo("An error occurred during script execution.");
+                Echo("An error occurred in Program().");
                 Echo($"Exception: {e}\n---");
 
                 // Rethrow the exception to make the programmable block halt execution properly
@@ -278,12 +281,112 @@ namespace IngameScript
         }
 
         public void Save() {
-            state.Set(configName, "forwardProgress", forwardProgress);
+            state.Set(configName, "forwardProgress", inwardProgress);
             state.Set(configName, "downwardProgress", downwardProgress);
 
             Storage = state.ToString();
         }
 
-        public void Main(string argument, UpdateType updateSource) { }
+        public void Main(string argument, UpdateType updateSource) {
+
+            IEnumerator<bool> stateMachine = setHorizontalExtension(maxArmFwd);
+
+            try
+            {
+                argument = argument.ToLower();
+
+                if (!initialized)
+                {
+                    Echo("Error: Not initialized");
+                    return;
+                }
+
+                if ((updateSource & UpdateType.Update10) != 0)
+                {
+                    updateState();
+                    bool hasMoreSteps = stateMachine.MoveNext();
+                    if (!hasMoreSteps)
+                    {
+                        stateMachine.Dispose();
+                        Runtime.UpdateFrequency = UpdateFrequency.Once;
+                        Echo("Done");
+                    }
+                }
+
+                if ((updateSource & (UpdateType.Trigger | UpdateType.Terminal | UpdateType.Once)) != 0)
+                {
+                    if (!running)
+                    {
+                        Runtime.UpdateFrequency = UpdateFrequency.Update10;
+                        running = true;
+                        DebugEcho("Started running");
+                    }
+                    else
+                    {
+                        Runtime.UpdateFrequency = UpdateFrequency.None;
+                        running = false;
+                        DebugEcho("Stopped running");
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                // Dump the exception content
+                Echo("An error occurred in Main().");
+                Echo($"Exception: {e}\n---");
+
+                // Rethrow the exception to make the programmable block halt execution properly
+                throw;
+            }
+        }
+
+        public void updateState()
+        {
+            curArmFwd = 0;
+            foreach (IMyPistonBase piston in armPistons[Base6Directions.Direction.Forward])
+                curArmFwd += piston.CurrentPosition;
+            foreach (IMyPistonBase piston in armPistons[Base6Directions.Direction.Backward])
+                curArmFwd -= piston.CurrentPosition;
+        }
+
+        public IEnumerator<bool> setHorizontalExtension(float toDistance)
+        {
+            float distanceToGo = toDistance - curArmFwd;
+            
+            while (distanceToGo > 0.1)
+            {
+                foreach (IMyPistonBase piston in armPistons[Base6Directions.Direction.Forward])
+                {
+                    if (distanceToGo > 0)
+                    {
+                        if (piston.CurrentPosition < piston.MaxLimit)
+                        {
+                            piston.Velocity = moveSpeed;
+                            piston.Enabled = true;
+                            break;
+                        }
+                        else
+                        {
+                            piston.Enabled = false;
+                        }
+                    }
+                    else
+                    {
+                        if (piston.CurrentPosition > piston.MinLimit)
+                        {
+                            piston.Velocity = -moveSpeed;
+                            piston.Enabled = true;
+                            break;
+                        }
+                        else
+                        {
+                            piston.Enabled = false;
+                        }
+                    }
+                }
+
+                yield return true;
+            }
+        }
     }
 }

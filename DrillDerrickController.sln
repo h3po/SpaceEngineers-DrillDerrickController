@@ -5,7 +5,13 @@ VisualStudioVersion = 15.0.28307.489
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DrillDerrickController", "IngameScript1\DrillDerrickController.csproj", "{E3C8010D-A2BC-439D-9CE0-20A8FBECFC99}"
 EndProject
+Project("{D954291E-2A0B-460D-934E-DC6B0785DB48}") = "MotionController", "..\Mixins\MotionController\MotionController\MotionController.shproj", "{A623C8EA-AEB4-439C-AD65-2E487A6B766A}"
+EndProject
 Global
+	GlobalSection(SharedMSBuildProjectFiles) = preSolution
+		..\Mixins\MotionController\MotionController\MotionController.projitems*{a623c8ea-aeb4-439c-ad65-2e487a6b766a}*SharedItemsImports = 13
+		..\Mixins\MotionController\MotionController\MotionController.projitems*{e3c8010d-a2bc-439d-9ce0-20a8fbecfc99}*SharedItemsImports = 4
+	EndGlobalSection
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
 	EndGlobalSection
