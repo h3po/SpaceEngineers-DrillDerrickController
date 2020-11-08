@@ -21,20 +21,22 @@ namespace IngameScript
 {
     partial class Program
     {
-        //blocks
         //store pistons in lists keyed by direction
         Dictionary<Base6Directions.Direction, List<PistonMotionController>> armPistonControllers = Base6Directions.EnumDirections.ToDictionary(d => d, d => new List<PistonMotionController>());
         RotorMotionController rotorController;
         List<IMyShipDrill> drills = new List<IMyShipDrill>();
 
         //arm shape
-        float minArmFwd = 0; float curArmFwd = 0; float maxArmFwd = 0; float targetArmFwd = 0;
-        float minArmDown = 0; float curArmDown = 0; float maxArmDown = 0; float targetArmDown = 0;
+        float minArmFwd = 0; float maxArmFwd = 0;
+        float minArmDown = 0; float maxArmDown = 0;
         float minArmRadius = 0; //this is the outermost edge of the hole if the arm is fully retracted, not the innermost
         float maxArmRadius = 0;
 
         void InitArm()
         {
+            float curArmFwd = 0;
+            float curArmDown = 0;
+
             //store pistons in dict keyed by cubegrid
             List<IMyPistonBase> allPistons = new List<IMyPistonBase>();
             GridTerminalSystem.GetBlocksOfType(allPistons);
@@ -55,6 +57,7 @@ namespace IngameScript
             try
             {
                 firstPiston = pistonsByGrid[Me.CubeGrid];
+                firstPiston.Velocity = 0;
             }
             catch (System.Collections.Generic.KeyNotFoundException)
             {
@@ -92,6 +95,7 @@ namespace IngameScript
                 minArmFwd += pistonController.piston.MinLimit;
                 curArmFwd += pistonController.piston.CurrentPosition;
                 maxArmFwd += pistonController.piston.MaxLimit;
+                pistonController.piston.Velocity = 0;
             }
 
             foreach (PistonMotionController pistonController in armPistonControllers[Base6Directions.Direction.Backward])
@@ -99,6 +103,7 @@ namespace IngameScript
                 minArmFwd -= pistonController.piston.MaxLimit;
                 curArmFwd -= pistonController.piston.CurrentPosition;
                 maxArmFwd -= pistonController.piston.MinLimit;
+                pistonController.piston.Velocity = 0;
             }
 
             curArmFwd -= minArmFwd;
@@ -110,6 +115,7 @@ namespace IngameScript
                 minArmDown += pistonController.piston.MinLimit;
                 curArmDown += pistonController.piston.CurrentPosition;
                 maxArmDown += pistonController.piston.MaxLimit;
+                pistonController.piston.Velocity = 0;
             }
 
             foreach (PistonMotionController pistonController in armPistonControllers[Base6Directions.Direction.Up])
@@ -117,6 +123,7 @@ namespace IngameScript
                 minArmDown -= pistonController.piston.MaxLimit;
                 curArmDown -= pistonController.piston.CurrentPosition;
                 maxArmDown -= pistonController.piston.MinLimit;
+                pistonController.piston.Velocity = 0;
             }
 
             curArmDown -= minArmDown;

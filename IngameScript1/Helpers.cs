@@ -22,6 +22,7 @@ namespace IngameScript
     partial class Program
     {
         IMyTextSurface debugLcdSurface;
+        bool firstPrint = true;
 
         public void InitDebugLcd()
         {
